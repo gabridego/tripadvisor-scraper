@@ -3,8 +3,9 @@ import time
 from selenium import webdriver
 from selenium.common.exceptions import NoSuchElementException
 
+driver = webdriver.Firefox(executable_path='geckodriver.exe')
+# driver = webdriver.Chrome("chromedriver.exe")
 
-driver = webdriver.Chrome()
 
 def check_exists_by_xpath(xpath):
     try:
@@ -13,88 +14,82 @@ def check_exists_by_xpath(xpath):
         return False
     return True
 
-def restroScrape(url):
+
+def hotel_scrape(url, max_rev):
     driver.get(url)
-    restaurantName = driver.find_element_by_xpath('/html/body/div[2]/div[1]/div/div[4]/div/div[1]/h1').text
-    print("Starting for restaurant: {}".format(restaurantName))
-    fileName = 'reviews/' + restaurantName + '.csv'
-    csvFile = open(fileName, 'a+')
-    csvWriter = csv.writer(csvFile)
-    page = driver.find_element_by_css_selector('a.pageNum.last.taLnk')
+    name = driver.find_element_by_id('HEADING').text
+    # print("Starting for hotel: {}".format(name))
+    filename = name + '.csv'
+    csvfile = open(filename, 'w', encoding='utf-8', newline='')
+    csvwriter = csv.writer(csvfile)
+    page = driver.find_elements_by_css_selector('a.pageNum')[-1]
     page_number = int(page.text) + 1
-    print("Pages are {}".format(page_number - 1))
+    tot = 0
+    # print("Pages are {}".format(page_number - 1))
+    csvwriter.writerow(['text', 'class'])
 
     for i in range(0, page_number):
 
-        if check_exists_by_xpath("//span[@class='taLnk ulBlueLinks']") is True:
-            # to expand the review 
-            driver.find_element_by_xpath("//span[@class='taLnk ulBlueLinks']").click()
-            time.sleep(5)
+        if check_exists_by_xpath("//span[@class='location-review-review-list-parts-ExpandableReview__cta--2mR2g']"):
+            # to expand the review
+            driver.find_element_by_xpath("//span[@class='location-review-review-list-parts-ExpandableReview__cta"
+                                         "--2mR2g']").click()
+            time.sleep(2)
 
-        container = driver.find_elements_by_xpath("//div[@class='review-container']")
+        container = driver.find_elements_by_xpath("//div[@class='location-review-review-list-parts"
+                                                  "-SingleReview__mainCol--1hApa']")
 
         num_page_items = len(container)
         for j in range(num_page_items):
+            if tot > max_rev:
+                csvfile.close()
+                return
 
-            string = container[j].find_element_by_xpath(".//span[contains(@class, 'ui_bubble_rating bubble_')]").get_attribute("class")
+            string = container[j].find_element_by_xpath(
+                ".//span[contains(@class, 'ui_bubble_rating bubble_')]").get_attribute("class")
             data = string.split("_")
 
             rating = int(data[3]) / 10
-            print(data)
+            if rating >= 3:
+                cl = 'pos'
+            else:
+                cl = 'neg'
+            # print(data)
 
-            title = container[j].find_element_by_xpath(".//span[@class='noQuotes']").text.replace("\n", "")
-            print("Review Title: {}".format(title))
+            review = container[j].find_element_by_xpath(".//q[@class='location-review-review-list-parts"
+                                                        "-ExpandableReview__reviewText--gOmRC']/span") \
+                                                        .text.replace("\n", "")
+            # print("Review is : {}".format(review))
 
-            date = container[j].find_element_by_xpath(".//span[@class='ratingDate']").text.replace("\n", "")
-            date = date.replace('Reviewed ', '')
-            print("Review Date is : {}".format(date))
-
-            review = container[j].find_element_by_xpath(".//p[@class='partial_entry']").text.replace("\n", "")
-            print("Review is : {}".format(review))
-
-            print("\n")
-            csvWriter.writerow([rating, date, review, title, "TripAdvisor"])
-
-        
-        xpath = '/html/body/div[2]/div[2]/div[2]/div[5]/div/div[1]/div[3]/div/div[5]/div/div[14]/div/div/a[2]'
-        if not check_exists_by_xpath(xpath):
-            xpath = '/html/body/div[2]/div[2]/div[2]/div[5]/div/div[1]/div[3]/div/div[5]/div/div[15]/div/div/a[2]'
+            # print("\n")
+            csvwriter.writerow([review, cl])
+            tot += 1
 
         if i == page_number - 2:
+            csvfile.close()
             return
-        driver.find_element_by_xpath(xpath).click()
-        time.sleep(5)
+
+        driver.find_element_by_css_selector('a.ui_button.nav.next.primary').click()
+        time.sleep(2)
+
     driver.back()
 
-driver.get("https://www.tripadvisor.in/Restaurants-g659786-Siliguri_Darjeeling_District_West_Bengal.html")
-restaurants = driver.find_elements_by_class_name('restaurants-list-ListCell__cellContainer--2mpJS')
 
-page = driver.find_element_by_xpath('//*[@id="EATERY_LIST_CONTENTS"]/div[2]/div/div/a[6]')
-page_number = int(page.text) + 1
-print("There are {} pages".format(page_number - 1))
+def main():
+    # url of hotel to scrape
+    url = 'https://www.tripadvisor.it/Hotel_Review-g187855-d570594-Reviews-Hotel_Nizza-Turin_Province_of_Turin_Piedmont.html'
 
-for i in range(0, page_number):
+    # number of reviews to get, leave float('inf') to get all
+    max_rev = float('inf')
+    # max_rev = 50
 
-    for j in range(len(restaurants)):
-        url = restaurants[j].find_element_by_xpath(".//a[@class='restaurants-list-ListCell__restaurantName--2aSdo']").get_attribute("href")
-        try:
-            restroScrape(url)
-        except Exception as e:
-            print(e)
-        
-        driver.get("https://www.tripadvisor.in/Restaurants-g659786-Siliguri_Darjeeling_District_West_Bengal.html")
-        restaurants = driver.find_elements_by_class_name('restaurants-list-ListCell__cellContainer--2mpJS')
-        time.sleep(10)
-    
-    xpath = '/html/body/div[4]/div[3]/div[2]/div[2]/div[2]/div/div[2]/div[5]/div[2]/div[5]/div[2]/div/a[2]'   
-    if not check_exists_by_xpath(xpath):
-        xpath = '/html/body/div[4]/div[3]/div[2]/div[2]/div[2]/div/div[2]/div[5]/div[2]/div[5]/div[2]/div/a'
-        
     try:
-        driver.find_element_by_xpath(xpath).click()
+        hotel_scrape(url, max_rev)
     except Exception as e:
         print(e)
 
-time.sleep(25)
+    driver.close()
 
-driver.close()
+
+if __name__ == '__main__':
+    main()
